@@ -4,6 +4,7 @@
  */
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -42,6 +43,7 @@ app.use((req, res, next) => {
 });
 app.use(session({
   name: 'ms.sid',
+  store: new pgSession({ pool, schemaName: 'mark_status', tableName: 'session', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,
@@ -109,11 +111,17 @@ app.get('/api/status/:token', h(async (req, res) => {
 }));
 
 // ═══ התחברות ══════════════════════════════════════════
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const attempts = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, a] of attempts) if (now - a.t > LOGIN_WINDOW_MS) attempts.delete(ip);
+}, LOGIN_WINDOW_MS).unref();
+
 app.post('/api/login', (req, res) => {
   const ip = req.ip;
   const a = attempts.get(ip) || { n: 0, t: Date.now() };
-  if (Date.now() - a.t > 15 * 60 * 1000) { a.n = 0; a.t = Date.now(); }
+  if (Date.now() - a.t > LOGIN_WINDOW_MS) { a.n = 0; a.t = Date.now(); }
   if (a.n >= 10) return res.status(429).json({ error: 'יותר מדי ניסיונות. נסה שוב בעוד רבע שעה' });
 
   const name = String(req.body?.name || '').trim();
@@ -130,7 +138,10 @@ app.post('/api/login', (req, res) => {
   });
 });
 app.post('/api/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
-app.get('/api/me', (req, res) => res.json({ editor: req.session?.editor || null, editors: Object.keys(EDITORS) }));
+app.get('/api/me', (req, res) => {
+  const editor = req.session?.editor || null;
+  res.json({ editor, editors: editor ? Object.keys(EDITORS) : [] });
+});
 
 // ═══ ניהול · לקוחות ═══════════════════════════════════
 app.get('/api/admin/clients', requireAuth, h(async (_req, res) => {
@@ -150,6 +161,16 @@ app.post('/api/admin/clients', requireAuth, h(async (req, res) => {
     `INSERT INTO mark_status.clients (name, subtitle, token, version)
      VALUES ($1,$2,$3,COALESCE($4,'1.0')) RETURNING *`,
     [name.trim(), subtitle || null, token, version || null]);
+  res.json(rows[0]);
+}));
+
+app.get('/api/admin/clients/:id', requireAuth, h(async (req, res) => {
+  const { rows } = await q(
+    `SELECT c.*,
+       (SELECT COUNT(*)::int FROM mark_status.items i WHERE i.client_id=c.id) AS item_count,
+       (SELECT COUNT(*)::int FROM mark_status.items i WHERE i.client_id=c.id AND i.status='done') AS done_count
+     FROM mark_status.clients c WHERE c.id=$1`, [req.params.id]);
+  if (!rows.length) return res.status(404).json({ error: 'לא נמצא' });
   res.json(rows[0]);
 }));
 
@@ -228,7 +249,9 @@ app.post('/api/admin/clients/:id/reorder', requireAuth, h(async (req, res) => {
   try {
     await c.query('BEGIN');
     for (let i = 0; i < ids.length; i++) {
-      await c.query(`UPDATE mark_status.items SET sort_order=$1 WHERE id=$2 AND client_id=$3`, [i, ids[i], req.params.id]);
+      await c.query(
+        `UPDATE mark_status.items SET sort_order=$1 WHERE id=$2 AND client_id=$3 AND sort_order IS DISTINCT FROM $1`,
+        [i, ids[i], req.params.id]);
     }
     await c.query('COMMIT');
   } catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
