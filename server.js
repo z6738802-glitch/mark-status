@@ -85,7 +85,7 @@ function buildUpdate(body, allowed, startIdx = 2) {
 // ═══ ציבורי ═══════════════════════════════════════════
 app.get('/api/status/:token', h(async (req, res) => {
   const { rows: cl } = await q(
-    `SELECT id, name, subtitle, version, updated_at FROM mark_status.clients
+    `SELECT id, name, subtitle, version, logo_url, updated_at FROM mark_status.clients
       WHERE token=$1 AND is_active=TRUE`, [req.params.token]);
   if (!cl.length) return res.status(404).json({ error: 'לא נמצא' });
   const client = cl[0];
@@ -93,7 +93,7 @@ app.get('/api/status/:token', h(async (req, res) => {
   const [items, questions, history, last] = await Promise.all([
     q(`SELECT id,title,description,status,icon,owner,stage,blocker,bullets,updated_at
          FROM mark_status.items WHERE client_id=$1 ORDER BY sort_order, id`, [client.id]),
-    q(`SELECT id,title,body FROM mark_status.questions WHERE client_id=$1 ORDER BY sort_order, id`, [client.id]),
+    q(`SELECT id,title,body,answer,answered_at FROM mark_status.questions WHERE client_id=$1 ORDER BY sort_order, id`, [client.id]),
     q(`SELECT item_title, change, changed_at FROM mark_status.history
         WHERE client_id=$1 ORDER BY changed_at DESC LIMIT 20`, [client.id]),
     q(`SELECT GREATEST(
@@ -105,9 +105,42 @@ app.get('/api/status/:token', h(async (req, res) => {
 
   res.set('Cache-Control', 'no-store');
   res.json({
-    client: { name: client.name, subtitle: client.subtitle, version: client.version, updated_at: last.rows[0].at },
+    client: { name: client.name, subtitle: client.subtitle, version: client.version, logo_url: client.logo_url, updated_at: last.rows[0].at },
     items: items.rows, questions: questions.rows, history: history.rows,
   });
+}));
+
+// לקוח מעדכן את הלוגו שלו עצמו, מזוהה רק לפי הטוקן הסודי
+app.put('/api/status/:token/logo', h(async (req, res) => {
+  const logo_url = String(req.body?.logo_url ?? '').trim();
+  if (logo_url && !/^https?:\/\//i.test(logo_url)) return res.status(400).json({ error: 'כתובת לא תקינה' });
+  if (logo_url.length > 500) return res.status(400).json({ error: 'הכתובת ארוכה מדי' });
+
+  const { rows } = await q(
+    `UPDATE mark_status.clients SET logo_url=$1 WHERE token=$2 AND is_active=TRUE RETURNING id, logo_url`,
+    [logo_url || null, req.params.token]);
+  if (!rows.length) return res.status(404).json({ error: 'לא נמצא' });
+  await q(`INSERT INTO mark_status.history (client_id,change) VALUES ($1,$2)`, [rows[0].id, 'עדכן לוגו']);
+  res.json({ logo_url: rows[0].logo_url });
+}));
+
+// לקוח עונה על שאלה פתוחה, ויכול לערוך את התשובה בכל עת
+app.post('/api/status/:token/questions/:qid/answer', h(async (req, res) => {
+  const answer = String(req.body?.answer ?? '').trim();
+  if (!answer) return res.status(400).json({ error: 'יש להזין תשובה' });
+  if (answer.length > 4000) return res.status(400).json({ error: 'התשובה ארוכה מדי' });
+
+  const { rows } = await q(
+    `UPDATE mark_status.questions AS qu SET answer=$1, answered_at=NOW()
+       FROM mark_status.clients c
+      WHERE qu.id=$2 AND qu.client_id=c.id AND c.token=$3 AND c.is_active=TRUE
+      RETURNING qu.id, qu.title, qu.body, qu.answer, qu.answered_at, qu.client_id`,
+    [answer, req.params.qid, req.params.token]);
+  if (!rows.length) return res.status(404).json({ error: 'לא נמצא' });
+
+  await q(`INSERT INTO mark_status.history (client_id,item_title,change) VALUES ($1,$2,$3)`,
+    [rows[0].client_id, rows[0].title, 'ענה על שאלה']);
+  res.json({ id: rows[0].id, title: rows[0].title, body: rows[0].body, answer: rows[0].answer, answered_at: rows[0].answered_at });
 }));
 
 // ═══ התחברות ══════════════════════════════════════════
@@ -174,11 +207,22 @@ app.get('/api/admin/clients/:id', requireAuth, h(async (req, res) => {
   res.json(rows[0]);
 }));
 
+const TOKEN_RE = /^[A-Za-z0-9_-]{4,64}$/;
 app.put('/api/admin/clients/:id', requireAuth, h(async (req, res) => {
-  const { sets, vals } = buildUpdate(req.body || {}, ['name', 'subtitle', 'version', 'is_active']);
-  const { rows } = sets.length
-    ? await q(`UPDATE mark_status.clients SET ${sets.join(',')} WHERE id=$1 RETURNING *`, [req.params.id, ...vals])
-    : await q(`SELECT * FROM mark_status.clients WHERE id=$1`, [req.params.id]);
+  const body = req.body || {};
+  if (body.token !== undefined && !TOKEN_RE.test(body.token)) {
+    return res.status(400).json({ error: 'פורמט קישור לא תקין (רק אותיות, מספרים, מקף וקו תחתון)' });
+  }
+  const { sets, vals } = buildUpdate(body, ['name', 'subtitle', 'version', 'logo_url', 'is_active', 'token']);
+  let rows;
+  try {
+    ({ rows } = sets.length
+      ? await q(`UPDATE mark_status.clients SET ${sets.join(',')} WHERE id=$1 RETURNING *`, [req.params.id, ...vals])
+      : await q(`SELECT * FROM mark_status.clients WHERE id=$1`, [req.params.id]));
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'הקישור הזה כבר תפוס, נסה קישור אחר' });
+    throw e;
+  }
   if (!rows.length) return res.status(404).json({ error: 'לא נמצא' });
   res.json(rows[0]);
 }));

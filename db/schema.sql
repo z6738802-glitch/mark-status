@@ -10,10 +10,12 @@ CREATE TABLE IF NOT EXISTS clients (
   subtitle    TEXT,
   token       TEXT        NOT NULL UNIQUE,
   version     TEXT        DEFAULT '1.0',
+  logo_url    TEXT,
   is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS logo_url TEXT;
 
 CREATE TABLE IF NOT EXISTS items (
   id           BIGSERIAL PRIMARY KEY,
@@ -38,9 +40,13 @@ CREATE TABLE IF NOT EXISTS questions (
   client_id   BIGINT      NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
   title       TEXT        NOT NULL,
   body        TEXT,
+  answer      TEXT,
+  answered_at TIMESTAMPTZ,
   sort_order  INT         NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS answer TEXT;
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS answered_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS questions_client_idx ON questions (client_id, sort_order);
 
 CREATE TABLE IF NOT EXISTS history (
