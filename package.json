@@ -12,6 +12,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "compression": "^1.8.2",
     "connect-pg-simple": "^10.0.0",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
