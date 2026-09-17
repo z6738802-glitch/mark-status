@@ -26,6 +26,14 @@ body{margin:0;direction:rtl;text-align:right;background:var(--bg);color:var(--in
 svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .wrap{max-width:1120px;margin:0 auto;padding:48px 24px 72px}
 
+/* ── מיתוג ── */
+.brand{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.brand-logo{height:36px;max-width:160px;object-fit:contain;display:block}
+.brand-client{display:flex;align-items:center;gap:10px}
+.brand-empty{color:var(--muted);font-size:13.5px}
+.brand-edit{font:inherit;font-size:12.5px;color:var(--muted);background:none;border:1px dashed var(--line-2);border-radius:8px;padding:4px 9px;cursor:pointer}
+.brand-edit:hover{color:var(--accent);border-color:var(--accent)}
+
 /* ── כותרת ומסילת התקדמות ── */
 header{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:30px 32px 26px;margin-bottom:28px}
 .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap}
@@ -75,9 +83,17 @@ ul.steps li.ok svg{color:var(--done)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px}
 .panel h3{margin:0 0 14px;font-size:19px;font-weight:700;display:flex;align-items:center;gap:9px}
 .panel h3 svg{color:var(--accent)}
-.qs{margin:0;padding:0;list-style:none;display:grid;gap:14px}
+.qs{margin:0;padding:0;list-style:none;display:grid;gap:18px}
 .qs b{display:block;font-weight:500}
 .qs span{color:var(--muted);font-size:15px}
+.qa{width:100%;box-sizing:border-box;margin-top:10px;padding:9px 12px;border:1px solid var(--line-2);border-radius:9px;
+  font:inherit;font-size:15px;color:var(--ink);background:var(--tint);resize:vertical;min-height:64px;direction:rtl;text-align:right}
+.qa-row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.qa-row button{font:inherit;font-size:14px;font-weight:500;padding:7px 14px;border-radius:9px;border:1px solid var(--accent);
+  background:var(--accent);color:#fff;cursor:pointer}
+.qa-row button:hover{background:#246a70}
+.qa-row button:disabled{opacity:.5;cursor:default}
+.qa-msg{font-size:13.5px;color:var(--muted)}
 .hist{margin:0;padding:0;list-style:none}
 .hist li{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line);font-size:15px}
 .hist li:last-child{border-bottom:0}
@@ -96,7 +112,9 @@ footer{margin-top:36px;text-align:center;color:var(--muted);font-size:14px}
 <main class="wrap" id="root"><div class="state">טוען את מצב העבודה</div></main>
 <script src="/icons.js"></script>
 <script>
-const I = MS_ICONS, S = MS_STATUS, svg = msSvg, esc = msEsc;
+const I = MS_ICONS, S = MS_STATUS, svg = msSvg, esc = msEsc, $ = id => document.getElementById(id);
+const MARK_LOGO = 'https://mekusharim.tzvi-mark.uk/uploads/___________________________________png-07.png';
+let TOKEN = '';
 const fmt = d => d ? new Date(d).toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 const fmtShort = d => d ? new Date(d).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }) : '';
 const CHECK = '<path d="M20 6 9 17l-5-5"/>', DOT = '<circle cx="12" cy="12" r="8"/>';
@@ -138,12 +156,24 @@ function render({ client, items, questions, history }) {
   }).join('');
 
   const qPanel = questions.length ? `<section class="panel"><h3>${svg('<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>')}מחכה להחלטה שלכם</h3>
-    <ul class="qs">${questions.map(q => `<li><b>${esc(q.title)}</b>${q.body ? `<span>${esc(q.body)}</span>` : ''}</li>`).join('')}</ul></section>` : '';
+    <ul class="qs">${questions.map(q => `<li data-qid="${q.id}">
+      <b>${esc(q.title)}</b>${q.body ? `<span>${esc(q.body)}</span>` : ''}
+      <textarea class="qa" placeholder="כתבו כאן את התשובה שלכם">${esc(q.answer || '')}</textarea>
+      <div class="qa-row"><button type="button" class="qa-send" data-qid="${q.id}">${q.answered_at ? 'עדכן תשובה' : 'שלח תשובה'}</button>
+        <span class="qa-msg">${q.answered_at ? `נענה ${fmtShort(q.answered_at)}` : ''}</span></div>
+    </li>`).join('')}</ul></section>` : '';
   const hPanel = history.length ? `<section class="panel"><h3>${svg('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>')}מה השתנה לאחרונה</h3>
-    <ul class="hist">${history.map(x => `<li><span>${esc(x.item_title || '')}: ${esc(x.change)}</span><time>${fmtShort(x.changed_at)}</time></li>`).join('')}</ul></section>` : '';
+    <ul class="hist">${history.map(x => `<li><span>${x.item_title ? `${esc(x.item_title)}: ` : ''}${esc(x.change)}</span><time>${fmtShort(x.changed_at)}</time></li>`).join('')}</ul></section>` : '';
 
   document.getElementById('root').innerHTML = `
     <header>
+      <div class="brand">
+        <img class="brand-logo" src="${esc(MARK_LOGO)}" alt="MARK Automations">
+        <div class="brand-client">
+          ${client.logo_url ? `<img class="brand-logo" src="${esc(client.logo_url)}" alt="${esc(client.name)}">` : `<span class="brand-empty">אין לוגו</span>`}
+          <button type="button" class="brand-edit" id="editLogo">${client.logo_url ? 'החלף לוגו' : 'הוסיפו לוגו'}</button>
+        </div>
+      </div>
       <div class="head">
         <div><h1>${esc(client.name)}</h1><p class="sub">${esc(client.subtitle || 'מצב העבודה על המערכת')}</p></div>
         <div class="meta"><span>עודכן <b>${fmt(client.updated_at)}</b></span><span>גרסה <b>${esc(client.version || '1.0')}</b></span></div>
@@ -155,12 +185,42 @@ function render({ client, items, questions, history }) {
     ${(qPanel || hPanel) ? `<div class="cols">${qPanel}${hPanel}</div>` : ''}
     <footer>MARK Automations</footer>`;
   document.title = `${client.name} | מצב העבודה`;
+
+  $('editLogo')?.addEventListener('click', async () => {
+    const url = prompt('קישור לתמונת הלוגו (השאירו ריק כדי להסיר)', client.logo_url || '');
+    if (url === null) return;
+    try {
+      const r = await fetch(`/api/status/${encodeURIComponent(TOKEN)}/logo`,
+        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ logo_url: url.trim() }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'העדכון נכשל');
+      load();
+    } catch (e) { alert(e.message); }
+  });
+
+  document.querySelectorAll('.qa-send').forEach(btn => {
+    btn.onclick = async () => {
+      const li = btn.closest('li');
+      const ta = li.querySelector('.qa');
+      const msg = li.querySelector('.qa-msg');
+      const val = ta.value.trim();
+      if (!val) { msg.textContent = 'יש להזין תשובה'; return; }
+      btn.disabled = true; msg.textContent = '';
+      try {
+        const r = await fetch(`/api/status/${encodeURIComponent(TOKEN)}/questions/${btn.dataset.qid}/answer`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answer: val }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'השליחה נכשלה');
+        load();
+      } catch (e) { msg.textContent = e.message; btn.disabled = false; }
+    };
+  });
 }
 
 async function load() {
-  const token = location.pathname.split('/').filter(Boolean).pop();
+  TOKEN = location.pathname.split('/').filter(Boolean).pop();
   try {
-    const r = await fetch(`/api/status/${encodeURIComponent(token)}`, { cache: 'no-store' });
+    const r = await fetch(`/api/status/${encodeURIComponent(TOKEN)}`, { cache: 'no-store' });
     if (!r.ok) throw 0;
     render(await r.json());
   } catch {
@@ -168,8 +228,11 @@ async function load() {
   }
 }
 load();
-// רענון שקט כל 5 דקות למי שמשאיר את העמוד פתוח
-setInterval(() => { if (!document.hidden) load(); }, 5 * 60 * 1000);
+// רענון שקט כל 5 דקות למי שמשאיר את העמוד פתוח, מדלג אם הלקוח באמצע כתיבת תשובה
+setInterval(() => {
+  if (document.hidden || document.activeElement?.classList?.contains('qa')) return;
+  load();
+}, 5 * 60 * 1000);
 </script>
 </body>
 </html>

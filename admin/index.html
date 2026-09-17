@@ -21,10 +21,12 @@ body{margin:0;direction:rtl;text-align:right;background:var(--bg);color:var(--in
   font-family:'Heebo',system-ui,Arial,sans-serif;font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased}
 svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .wrap{max-width:1040px;margin:0 auto;padding:32px 22px 80px}
-.bar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:22px;
+  position:sticky;top:0;z-index:20;background:var(--bg);padding:14px 0;margin-top:-14px}
 .bar h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.015em}
 .bar .who{color:var(--muted);font-size:14px}
 .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.jump{display:flex;gap:6px;flex-wrap:wrap}
 .box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:16px}
 .box h2{margin:0 0 14px;font-size:18px;font-weight:700}
 button,.btn{font:inherit;font-size:14.5px;font-weight:500;display:inline-flex;align-items:center;gap:7px;
@@ -76,6 +78,7 @@ label{display:block;font-size:13.5px;font-weight:500;color:var(--muted);margin-b
 .bl input[type=text]{flex:1}
 .linkbox{display:flex;gap:8px;align-items:center}
 .linkbox input{direction:ltr;text-align:left;font-size:14px;color:var(--muted)}
+.answer-ro{background:var(--tint);border:1px solid var(--line);border-radius:9px;padding:9px 12px;white-space:pre-wrap;font-size:14.5px}
 .empty{text-align:center;color:var(--muted);padding:26px}
 .login{max-width:380px;margin:12vh auto 0}
 .login h1{font-size:24px;margin:0 0 4px}
@@ -175,15 +178,22 @@ async function renderClient(id) {
 
   $('app').innerHTML = `
     <div class="bar"><div><button class="ghost" id="back">${svg(UI.back)}כל הלקוחות</button><h1>${esc(c.name)}</h1></div>
-      <div class="actions"><a class="btn" href="/s/${esc(c.token)}" target="_blank" rel="noopener">${svg(UI.eye)}תצוגת לקוח</a>
+      <div class="actions"><div class="jump">
+        <button class="sm ghost" data-jump="secInfo">פרטים</button>
+        <button class="sm ghost" data-jump="secItems">נושאים</button>
+        <button class="sm ghost" data-jump="secQuestions">שאלות</button></div>
+      <a class="btn" href="/s/${esc(c.token)}" target="_blank" rel="noopener">${svg(UI.eye)}תצוגת לקוח</a>
       <button class="primary" id="newItem">${svg(UI.plus)}נושא חדש</button></div></div>
 
-    <section class="box"><h2>פרטי העמוד</h2>
+    <section class="box" id="secInfo"><h2>פרטי העמוד</h2>
       <div class="g2"><div class="f"><label for="cName">שם</label><input id="cName" value="${esc(c.name)}"></div>
         <div class="f"><label for="cSub">שורת משנה</label><input id="cSub" value="${esc(c.subtitle || '')}" placeholder="מצב העבודה על המערכת"></div></div>
       <div class="g2"><div class="f"><label for="cVer">גרסה</label><input id="cVer" value="${esc(c.version || '1.0')}"></div>
-        <div class="f"><label>קישור ללקוח</label><div class="linkbox"><input readonly value="${publicUrl(c.token)}">
-          <button class="sm" id="cp">${svg(UI.copy)}</button></div></div></div>
+        <div class="f"><label for="cLogo">לוגו הלקוח (קישור לתמונה)</label><input id="cLogo" value="${esc(c.logo_url || '')}" placeholder="https://..."></div></div>
+      <div class="f"><label for="cToken">קישור ללקוח (המזהה בסוף הכתובת)</label><div class="linkbox">
+        <input id="cToken" value="${esc(c.token)}">
+        <button class="sm" id="saveToken">שמור קישור</button>
+        <button class="sm" id="cp">${svg(UI.copy)}</button></div></div>
       <div class="actions">
         <button class="primary" id="saveC">${svg(UI.save)}שמור פרטים</button>
         <button id="toggle">${c.is_active ? 'השבת קישור' : 'הפעל קישור'}</button>
@@ -191,19 +201,27 @@ async function renderClient(id) {
         <button class="danger" id="delC">${svg(UI.trash)}מחק לקוח</button></div>
     </section>
 
-    <section class="box"><h2>נושאים</h2><div id="items">
+    <section class="box" id="secItems"><h2>נושאים</h2><div id="items">
       ${items.length ? items.map((it, i) => itemHTML(it, i, items.length)).join('') : '<div class="empty">אין נושאים. הוסף נושא ראשון.</div>'}
     </div></section>
 
-    <section class="box"><h2>שאלות שמחכות ללקוח</h2><div id="qs">
+    <section class="box" id="secQuestions"><h2>שאלות שמחכות ללקוח</h2><div id="qs">
       ${questions.map(qHTML).join('') || '<div class="empty">אין שאלות פתוחות</div>'}
     </div><button class="sm" id="newQ">${svg(UI.plus)}שאלה חדשה</button></section>`;
 
+  document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () =>
+    $(b.dataset.jump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   $('back').onclick = () => { OPEN.clear(); renderClients(); };
   $('cp').onclick = () => copy(publicUrl(c.token));
   $('saveC').onclick = async () => {
-    await api(`/api/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify({ name: $('cName').value, subtitle: $('cSub').value, version: $('cVer').value }) });
+    await api(`/api/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify({ name: $('cName').value, subtitle: $('cSub').value, version: $('cVer').value, logo_url: $('cLogo').value }) });
     toast('הפרטים נשמרו'); renderClient(id);
+  };
+  $('saveToken').onclick = async () => {
+    const token = $('cToken').value.trim();
+    if (token === c.token) return;
+    await api(`/api/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify({ token }) });
+    toast('הקישור עודכן'); renderClient(id);
   };
   $('toggle').onclick = async () => {
     await api(`/api/admin/clients/${id}`, { method: 'PUT', body: JSON.stringify({ is_active: !c.is_active }) });
@@ -219,9 +237,15 @@ async function renderClient(id) {
   };
   $('newItem').onclick = async () => {
     const it = await api('/api/admin/items', { method: 'POST', body: JSON.stringify({ client_id: id, title: 'נושא חדש' }) });
-    OPEN.add(String(it.id)); renderClient(id);
+    OPEN.add(String(it.id));
+    await renderClient(id);
+    document.querySelector(`.item[data-id="${it.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  $('newQ').onclick = async () => { await api('/api/admin/questions', { method: 'POST', body: JSON.stringify({ client_id: id, sort_order: questions.length }) }); renderClient(id); };
+  $('newQ').onclick = async () => {
+    await api('/api/admin/questions', { method: 'POST', body: JSON.stringify({ client_id: id, sort_order: questions.length }) });
+    await renderClient(id);
+    $('secQuestions')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   wire(id, items);
 }
 
@@ -259,6 +283,8 @@ const bulletHTML = (x = { text: '', done: false }) => `<div class="bl">
 const qHTML = q => `<div class="item" data-qid="${q.id}"><div class="ib">
   <div class="f" style="margin-top:12px"><label>שאלה</label><input data-qf="title" value="${esc(q.title)}"></div>
   <div class="f"><label>פירוט</label><textarea data-qf="body">${esc(q.body || '')}</textarea></div>
+  ${q.answer ? `<div class="f"><label>תשובת הלקוח${q.answered_at ? ` (${new Date(q.answered_at).toLocaleDateString('he-IL')})` : ''}</label>
+    <div class="answer-ro">${esc(q.answer)}</div></div>` : ''}
   <div class="actions"><button class="primary sm" data-qsave>${svg(UI.save)}שמור שאלה</button>
   <button class="danger sm" data-qdel>${svg(UI.trash)}מחק שאלה</button></div></div></div>`;
 
