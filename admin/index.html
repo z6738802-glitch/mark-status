@@ -119,21 +119,22 @@ async function copy(text) { try { await navigator.clipboard.writeText(text); toa
 
 // ═══ התחברות ═══
 async function renderLogin(msg) {
-  const { editors = [] } = await fetch('/api/me').then(r => r.json()).catch(() => ({}));
   $('app').innerHTML = `<div class="login box">
     <h1>ניהול עמודי סטטוס</h1><p>MARK Automations</p>
     ${msg ? `<div class="err">${esc(msg)}</div>` : ''}
-    <div class="f"><label for="nm">עורך</label><select id="nm">${editors.map(e => `<option>${esc(e)}</option>`).join('')}</select></div>
+    <div class="f"><label for="nm">עורך</label><input id="nm" autocomplete="username"></div>
     <div class="f"><label for="pw">סיסמה</label><input id="pw" type="password" autocomplete="current-password"></div>
     <button class="primary" id="go" style="width:100%;justify-content:center">כניסה</button></div>`;
-  $('pw').focus();
+  $('nm').focus();
   const go = async () => {
     const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: $('nm').value, password: $('pw').value }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return renderLogin(d.error || 'ההתחברות נכשלה');
     ME = d.editor; renderClients();
   };
-  $('go').onclick = go; $('pw').onkeydown = e => { if (e.key === 'Enter') go(); };
+  $('go').onclick = go;
+  $('nm').onkeydown = e => { if (e.key === 'Enter') $('pw').focus(); };
+  $('pw').onkeydown = e => { if (e.key === 'Enter') go(); };
 }
 
 // ═══ לקוחות ═══
@@ -168,9 +169,8 @@ async function renderClients() {
 // ═══ עריכת לקוח ═══
 let OPEN = new Set();
 async function renderClient(id) {
-  const clients = await api('/api/admin/clients');
-  const c = clients.find(x => String(x.id) === String(id));
-  if (!c) return renderClients();
+  let c;
+  try { c = await api(`/api/admin/clients/${id}`); } catch { return renderClients(); }
   const { items, questions } = await api(`/api/admin/clients/${id}/items`);
 
   $('app').innerHTML = `
