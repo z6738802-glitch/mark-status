@@ -5,6 +5,7 @@
 const express = require('express');
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
+const compression = require('compression');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -35,6 +36,7 @@ if (!process.env.SESSION_SECRET) {
 
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.use((req, res, next) => {
   res.set('X-Content-Type-Options', 'nosniff');
@@ -43,7 +45,8 @@ app.use((req, res, next) => {
 });
 app.use(session({
   name: 'ms.sid',
-  store: new pgSession({ pool, schemaName: 'mark_status', tableName: 'session', createTableIfMissing: true }),
+  // המושב לא מתחדש (rolling:false), אז אין טעם ל-UPDATE על כל בקשה כדי לרענן את זמן התפוגה
+  store: new pgSession({ pool, schemaName: 'mark_status', tableName: 'session', createTableIfMissing: true, disableTouch: true }),
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
   resave: false,
   saveUninitialized: false,

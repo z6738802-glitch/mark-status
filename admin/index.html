@@ -172,9 +172,11 @@ async function renderClients() {
 // ═══ עריכת לקוח ═══
 let OPEN = new Set();
 async function renderClient(id) {
-  let c;
-  try { c = await api(`/api/admin/clients/${id}`); } catch { return renderClients(); }
-  const { items, questions } = await api(`/api/admin/clients/${id}/items`);
+  let c, itemsData;
+  try {
+    [c, itemsData] = await Promise.all([api(`/api/admin/clients/${id}`), api(`/api/admin/clients/${id}/items`)]);
+  } catch { return renderClients(); }
+  const { items, questions } = itemsData;
 
   $('app').innerHTML = `
     <div class="bar"><div><button class="ghost" id="back">${svg(UI.back)}כל הלקוחות</button><h1>${esc(c.name)}</h1></div>
